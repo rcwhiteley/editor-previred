@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Editor Previred – Formato Largo Variable por Separador</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; color: #222; font-size: 13px; }
+
+  header {
+    background: linear-gradient(90deg, #5C6BC0, #3949AB);
+    color: #fff;
+    padding: 14px 24px;
+    display: flex; align-items: center; gap: 16px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.3);
+  }
+  header h1 { font-size: 18px; font-weight: 600; }
+  header span { font-size: 12px; opacity: .8; }
+
+  .toolbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px;
+    background: #fff;
+    border-bottom: 1px solid #ddd;
+    flex-wrap: wrap;
+  }
+  .toolbar label {
+    background: #5C6BC0; color: #fff;
+    padding: 6px 14px; border-radius: 4px;
+    cursor: pointer; font-size: 13px;
+    transition: background .2s;
+  }
+  .toolbar label:hover { background: #3949AB; }
+  #fileInput { display: none; }
+  .toolbar .info { font-size: 12px; color: #666; }
+  #rowCount { font-weight: 600; color: #5C6BC0; }
+
+  .search-wrap { position: relative; display: flex; align-items: center; }
+  .search-wrap input {
+    padding: 6px 30px 6px 10px; border: 1px solid #ccc; border-radius: 4px;
+    font-size: 13px; width: 240px; outline: none;
+  }
+  .search-wrap input:focus { border-color: #5C6BC0; box-shadow: 0 0 0 2px #c5cae9; }
+  .search-wrap .clear-btn {
+    position: absolute; right: 6px; background: none; border: none;
+    cursor: pointer; font-size: 15px; color: #999; line-height: 1;
+    display: none;
+  }
+  .search-wrap .clear-btn.visible { display: block; }
+  .search-info { font-size: 12px; color: #e65100; font-weight: 600; }
+  .modified-info { font-size: 12px; color: #1565c0; font-weight: 600; }
+  td.modified { box-shadow: inset 3px 0 0 #f57c00; background: #fff8e1 !important; }
+  td.modified input, td.modified select { background: transparent; }
+
+  .btn {
+    padding: 6px 14px; border-radius: 4px; border: none;
+    cursor: pointer; font-size: 13px; transition: background .2s;
+  }
+  .btn-export { background: #1976d2; color: #fff; }
+  .btn-export:hover { background: #1565c0; }
+
+  .table-wrap {
+    overflow: auto;
+    height: calc(100vh - 106px);
+    padding: 0;
+    position: relative;
+  }
+  .vscroll-spacer { pointer-events: none; }
+  .vscroll-table-wrap { position: sticky; top: 0; }
+
+  table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    background: #fff;
+  }
+  thead th {
+    position: sticky; top: 0; z-index: 10;
+    background: #4a148c; color: #fff;
+    padding: 6px 4px;
+    text-align: center;
+    border: 1px solid #6a1b9a;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    min-width: 90px;
+  }
+  thead th .col-num { display: block; font-size: 10px; opacity: .75; }
+  thead th .col-name { display: block; font-size: 11px; }
+  thead tr.section-row th {
+    background: #311b92; font-size: 11px; padding: 3px 6px;
+    text-align: left; letter-spacing: .5px;
+  }
+
+  tbody tr:nth-child(even) { background: #f9f6fd; }
+  tbody tr:hover { background: #ede7f6; }
+
+  td {
+    border: 1px solid #e0e0e0;
+    padding: 2px 3px;
+    vertical-align: middle;
+    min-width: 90px;
+  }
+  td input[type="text"], td input[type="number"] {
+    width: 100%; border: none; background: transparent;
+    padding: 2px 3px; font-size: 12px; color: #222;
+    outline: none;
+  }
+  td input[type="text"]:focus, td input[type="number"]:focus {
+    background: #fff9c4; border-radius: 2px;
+  }
+  td select {
+    width: 100%; border: none; background: transparent;
+    font-size: 12px; color: #222; outline: none; cursor: pointer;
+    padding: 2px 2px;
+  }
+  td select:focus { background: #fff9c4; }
+
+  .row-num {
+    background: #ede7f6; color: #555; font-size: 11px;
+    text-align: center; min-width: 36px; width: 36px;
+    font-weight: 600; position: sticky; left: 0; z-index: 5;
+  }
+
+  .empty-state {
+    text-align: center; padding: 60px 20px; color: #9e9e9e;
+  }
+  .empty-state svg { width: 64px; height: 64px; opacity: .3; margin-bottom: 12px; }
+  .empty-state p { font-size: 15px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Editor Previred</h1>
+    <span>Formato Estándar Largo Variable por Separador (;)</span>
+  </div>
+</header>
+
+<div class="toolbar">
+  <label for="fileInput">📂 Abrir CSV</label>
+  <input type="file" id="fileInput" accept=".csv,.txt">
+  <button class="btn btn-export" id="btnExport">💾 Exportar CSV</button>
+  <div class="search-wrap">
+    <input type="text" id="searchInput" placeholder="🔍 Buscar en todas las columnas..." autocomplete="off">
+    <button class="clear-btn" id="clearSearch" title="Limpiar búsqueda">✕</button>
+  </div>
+  <span class="info">Filas: <span id="rowCount">0</span></span>
+  <span class="search-info" id="searchInfo" style="display:none"></span>
+  <span class="modified-info" id="modifiedInfo" style="display:none"></span>
+</div>
+
+<div class="table-wrap" id="tableWrap">
+  <div class="empty-state" id="emptyState">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+    </svg>
+    <p>Abre un archivo CSV para comenzar.</p>
+  </div>
+</div>
+
+<script>
+// ─── LOOKUP TABLES ──────────────────────────────────────────────────────────
+const TABLAS = {
+  t1: [['M','Masculino'],['F','Femenino']],
+  t2: [['0','Chileno'],['1','Extranjero']],
+  t3: [['01','Remuneraciones del mes'],['02','Gratificaciones'],['03','Bono Ley de Modernización Empresas Públicas']],
+  t4: [['AFP','AFP'],['INP','IPS (Ex-INP)'],['SIP','Sin Institución Previsional']],
+  t5: [['0','Activo (No pensionado)'],['1','Pensionado y cotiza'],['2','Pensionado y No Cotiza o Pensionado por Invalidez Total'],['3','Activo desde los 65 años (Nunca Pensionado)'],['8','Exento de cotizar (Mujer desde 60, Hombre desde 65 o Extranjero)'],['9','Pensionado por Invalidez Parcial']],
+  t6: [['00','Línea Principal o Base'],['01','Línea Adicional'],['02','Segundo Contrato o Pagos Adicionales'],['03','Movimiento de Personal Afiliado Voluntario']],
+  t7: [['0','Sin Movimiento en el Mes'],['1','Contratación a plazo indefinido'],['2','Retiro'],['3','Subsidios'],['4','Permiso Sin Goce de Sueldos'],['5','Incorporación en el Lugar de Trabajo'],['6','Accidentes del Trabajo'],['7','Contratación a plazo fijo'],['8','Cambio Contrato plazo fijo a plazo indefinido'],['11','Otros Movimientos (Ausentismos)'],['12','Reliquidación, premio o bono posterior al finiquito']],
+  t8: [['A','Primer Tramo'],['B','Segundo Tramo'],['C','Tercer Tramo'],['D','Sin Derecho']],
+  t9: [['S','Sí, tiene Subsidio'],['N','No tiene Subsidio']],
+  t10: [['00','no está en AFP'],['03','Cuprum'],['05','Habitat'],['08','Provida'],['29','PlanVital'],['33','Capital'],['34','Modelo'],['35','Uno']],
+  t11_afp: [['000','No Cotiza A.P.V.'],['003','Cuprum'],['005','Habitat'],['008','Provida'],['029','Planvital'],['033','Capital'],['034','Modelo'],['035','Uno'],['102','SANTANDER SEGUROS DE VIDA S.A.'],['103','BCI SEGUROS VIDA S.A.'],['106','BICE VIDA COMPAÑIA DE SEGUROS S.A.'],['107','ZURICH CHILE SEGUROS DE VIDA.'],['111','CIA DE SEG. DE VIDA CONSORCIO NACIONAL DE SEG S.A.'],['116','COMPAÑIA DE SEGUROS CONFUTURO S.A.'],['118','SEGUROS DE VIDA SURA S.A.'],['121','METLIFE CHILE SEGUROS DE VIDA S.A.'],['128','AUGUSTAR SEGUROS DE VIDA S.A.'],['129','PRINCIPAL COMPAÑIA DE SEGUROS DE VIDA CHILE S.A.'],['131','SEGUROS DE VIDA SECURITY PREVISION S.A.'],['137','PRUDENTIAL AGF. (APV)'],['151','CREDICORP CAPITAL ASSET MANAGMENT S.A AGF'],['204','BCI ASSET MANAGEMENT ADMINISTRADORA GENERAL DE FONDOS S.A.'],['205','BICE INVERSIONES AGF S.A.'],['208','BTG PACTUAL CHILE S.A. ADMINISTRADORA GENERAL DE FONDOS'],['214','PRINCIPAL ASSET MANAGEMENT AGF S.A.'],['215','SANTANDER ASSET MANAGEMENT S.A. ADM. GENERAL DE FONDOS'],['217','SCOTIA SUDAMERICANO ADM. DE FONDOS MUTUOS S.A.'],['218','ADMINISTRADORA GENERAL DE FONDOS SECURITY S.A.'],['225','ITAU ADMINISTRADORA GENERAL DE FONDOS S.A.'],['229','BANCOESTAD S.A. ADMINISTRADORA GENERAL DE FONDOS'],['237','FINTUAL ADMINISTRADORA GENERAL DE FONDOS S.A'],['238','FOCUS AGF S.A.'],['600','ZURICH CHILE ASSET MANAGEMENT ADMINISTRADORA GENERAL DE FONDOS S.A.'],['213','LARRAIN VIAL S.A. CORREDORA DE BOLSA'],['222','BANCHILE CORREDORES DE BOLSA S.A.'],['227','CORREDORES DE BOLSA SURA S.A.'],['228','BTG PACTUAL CHILE S.A. CORREDORES DE BOLSA'],['232','BICE INVERSIONES CORREDORES DE BOLSA S.A.'],['235','MBI CORREDORES DE BOLSA S.A.'],['236','CONSORCIO CORREDORES DE BOLSA S.A.'],['240','FINANZAS Y NEGOCIOS S.A. CORREDORES DE BOLSA']],
+  t12: [['1','Directa (directo a la Institución)'],['2','Indirecta (vía AFP del trabajador)']],
+  t13: [['10','Cese de Cotización de Afiliado Voluntario']],
+  t14: [['0000','No pertenece al IPS'],['0201','Bancaria - Régimen 1'],['0202','Bancaria - Régimen 2'],['0203','Bancaria - Régimen 3'],['0214','Bancaria - Régimen 14'],['0221','Bancaria - Régimen 21'],['0234','Bancaria - Régimen 34'],['2201','Caja de Previsión de Gildemeister - Régimen 1'],['2202','Caja de Previsión de Gildemeister - Régimen 2'],['1601','Caja de Previsión Social de los EE - Régimen 1'],['1602','Caja de Previsión Social de los EE - Régimen 2'],['1201','Caja Ferro - Régimen 1'],['1202','Caja Ferro - Régimen 2'],['1203','Caja Ferro - Régimen 3'],['1204','Caja Ferro - Régimen 4'],['1205','Caja Ferro - Régimen 5'],['1206','Caja Ferro - Régimen 6'],['1207','Caja Ferro - Régimen 7'],['1401','Canaempu: Periodistas - Régimen 1'],['1402','Canaempu: Periodistas - Régimen 2'],['1403','Canaempu: Periodistas - Régimen 3'],['1404','Canaempu: Periodistas - Régimen 4'],['1405','Canaempu: Periodistas - Régimen 5'],['1406','Canaempu: Periodistas - Régimen 6'],['1407','Canaempu: Periodistas - Régimen 7'],['1408','Canaempu: Periodistas - Régimen 8'],['1411','Canaempu: Periodistas - Régimen 11'],['1412','Canaempu: Periodistas - Régimen 12'],['1413','Canaempu: Periodistas - Régimen 13'],['1414','Canaempu: Periodistas - Régimen 14'],['1415','Canaempu: Periodistas - Régimen 15'],['1416','Canaempu: Periodistas - Régimen 16'],['1417','Canaempu: Periodistas - Régimen 17'],['1418','Canaempu: Periodistas - Régimen 18'],['1421','Canaempu: Periodistas - Régimen 21'],['1422','Canaempu: Periodistas - Régimen 22'],['1423','Canaempu: Periodistas - Régimen 23'],['1424','Canaempu: Periodistas - Régimen 24'],['1425','Canaempu: Periodistas - Régimen 25'],['1426','Canaempu: Periodistas - Régimen 26'],['1431','Canaempu: Periodistas - Régimen 31'],['1432','Canaempu: Periodistas - Régimen 32'],['1433','Canaempu: Periodistas - Régimen 33'],['1434','Canaempu: Periodistas - Régimen 34'],['1301','Canaempu: Públicos - Régimen 1'],['1302','Canaempu: Públicos - Régimen 2'],['1303','Canaempu: Públicos - Régimen 3'],['1305','Canaempu: Públicos - Régimen 5'],['1306','Canaempu: Públicos - Régimen 6'],['1308','Canaempu: Públicos - Régimen 8'],['1309','Canaempu: Públicos - Régimen 9'],['1310','Canaempu: Públicos - Régimen 10'],['1311','Canaempu: Públicos - Régimen 11'],['1312','Canaempu: Públicos - Régimen 12'],['1321','Canaempu: Públicos - Régimen 21'],['1322','Canaempu: Públicos - Régimen 22'],['1323','Canaempu: Públicos - Régimen 23'],['1325','Canaempu: Públicos - Régimen 25'],['1326','Canaempu: Públicos Régimen 26'],['1327','Canaempu: Públicos Régimen 28'],['1329','Canaempu: Públicos Régimen 29'],['1330','Canaempu: Públicos Régimen 30'],['1331','Canaempu: Públicos Régimen 31'],['1332','Canaempu: Públicos Régimen 32'],['1338','Canaempu: Públicos Régimen 38'],['0501','Caprebech - Régimen 1'],['0503','Caprebech - Régimen 3'],['0514','Caprebech - Régimen 14'],['0521','Caprebech - Régimen 21'],['0534','Caprebech - Régimen 34'],['0601','Capremer - Régimen 1'],['0602','Capremer - Régimen 2'],['0603','Capremer - Régimen 3'],['0604','Capremer - Régimen 4'],['0605','Capremer - Régimen 5'],['0606','Capremer - Régimen 6'],['0608','Capremer - Régimen 8'],['1501','Copremusa EE - Régimen 1'],['1502','Copremusa EE - Régimen 2'],['1503','Copremusa EE - Régimen 3'],['1601','Caja de Previsión Social de los EE - Régimen 1'],['1602','Caja de Previsión Social de los EE - Régimen 2'],['1701','EE Municipales de la República - Régimen 1'],['1702','EE Municipales de la República - Régimen 2'],['1703','EE Municipales de la República - Régimen 3'],['1704','EE Municipales de la República - Régimen 4'],['2001','EE Salitre - Régimen 1'],['2002','EE Salitre - Régimen 2'],['0101','Empart - Régimen 1'],['0102','Empart - Régimen 2'],['0103','Empart - Régimen 3'],['0104','Empart - Régimen 4'],['0106','Empart - Régimen 6'],['0106','Empleados de Emos - Régimen 1'],['0801','Hípica Nacional - Régimen 1'],['0802','Hípica Nacional - Régimen 2'],['0803','Hípica Nacional - Régimen 3'],['0804','Hípica Nacional - Régimen 4'],['2301','Mauricio, Hochschild - Régimen 1'],['2302','Mauricio, Hochschild - Régimen 2'],['1101','Obreros de Emos - Régimen 1'],['1801','OO Municipales de la República - Régimen 1'],['1802','OO Municipales de la República - Régimen 2'],['1803','OO Municipales de la República - Régimen 3'],['2101','Sección Esp.Previsión Empleados - Régimen 1'],['2102','Sección Esp.Previsión Empleados - Régimen 2'],['2401','Secgasco - Régimen 1'],['2402','Secgasco - Régimen 2'],['0901','Servicios de Seguro Social - Régimen 1'],['0902','Servicios de Seguro Social - Régimen 2'],['0701','Triomar - Régimen 1'],['0702','Triomar - Régimen 2'],['0703','Triomar - Régimen 3'],['0704','Triomar - Régimen 4']],
+  t15: [['0101','Empart'],['0201','Bancaria'],['0202','Bancaria'],['0203','Bancaria'],['0501','Caprebech'],['0502','Caprebech'],['0503','Caprebech'],['0601','Capremer'],['0903','Capremer (otro)'],['1204','Caja Ferro'],['1311','Canaempu: Públicos'],['1343','Canaempu: Públicos'],['1363','Canaempu: Públicos'],['1401','Canaempu: Periodistas'],['1406','Canaempu: Periodistas'],['1501','Copremusa EE'],['1503','Copremusa EE'],['1601','Caja de Previsión Social de los EE'],['1602','Caja de Previsión Social de los EE'],['1701','EE Municipales de la República'],['1901','Diomp']],
+  t16: [['00','Sin Isapre'],['01','Banmédica'],['02','Consalud'],['03','ColMena'],['04','Colmena'],['05','Cruz Blanca'],['07','Fonasa'],['10','Nueva Masvida'],['11','Isalud'],['12','Fundación'],['25','Cruz del Norte'],['28','Esencial']],
+  t17: [['1','Pesos'],['2','UF']],
+  t18: [['00','Sin CCAF'],['01','Los Andes'],['02','La Araucana'],['03','Los Héroes'],['04','18 de Septiembre']],
+  t19: [['00','Sin Mutual – Empresa entrega aporte Accidentes del Trabajo al ISL'],['01','Asociación Chilena de Seguridad (ACHS)'],['02','Mutual de Seguridad CCHC'],['03','Instituto de Seguridad del Trabajo I.S.T.']],
+  t20: [['96572800-7','Banmédica'],['96856780-2','Consalud'],['96502530-8','Vida Tres'],['76296619-0','Colmena'],['96501450-0','Cruz Blanca'],['96936100-0','Esencial'],['61603000-0','Fonasa'],['96504160-5','Nueva Masvida'],['76334370-7','Isalud'],['71235700-2','Fundación'],['79906120-1','Cruz del Norte'],['70360100-6','Asociación Chilena de Seguridad (ACHS)'],['70285100-9','Mutual de Seguridad CCHC'],['70015580-3','Instituto de Seguridad del Trabajo I.S.T'],['61533000-0','Instituto de Seguridad Laboral I.S.L.']],
+  t21: [['0','Sin Seguro'],['1','Colectivo'],['2','Individual']],
+  t22: [['1','Completa'],['2','Parcial']]
+};
+
+// ─── FIELD DEFINITIONS ──────────────────────────────────────────────────────
+// [colIndex(1-based), fieldName, section, tabla|null]
+const FIELDS = [
+  // Section 1 – Datos del Trabajador
+  {i:1,  s:'1- Datos del Trabajador', name:'RUT Trabajador',              tabla:null},
+  {i:2,  s:null, name:'DV Trabajador',                                    tabla:null},
+  {i:3,  s:null, name:'Apellido Paterno',                                  tabla:null},
+  {i:4,  s:null, name:'Apellido Materno',                                  tabla:null},
+  {i:5,  s:null, name:'Nombres',                                           tabla:null},
+  {i:6,  s:null, name:'Sexo',                                              tabla:'t1'},
+  {i:7,  s:null, name:'Nacionalidad',                                      tabla:'t2'},
+  {i:8,  s:null, name:'Tipo Pago',                                         tabla:'t3'},
+  {i:9,  s:null, name:'Período (Desde)',                                   tabla:null},
+  {i:10, s:null, name:'Período (Hasta)',                                   tabla:null},
+  {i:11, s:null, name:'Régimen Previsional',                               tabla:'t4'},
+  {i:12, s:null, name:'Tipo Trabajador',                                   tabla:'t5'},
+  {i:13, s:null, name:'Días Trabajados',                                   tabla:null},
+  {i:14, s:null, name:'Tipo de Línea',                                     tabla:'t6'},
+  {i:15, s:null, name:'Cód. Movimiento Personal',                          tabla:'t7'},
+  {i:16, s:null, name:'Fecha Desde',                                       tabla:null},
+  {i:17, s:null, name:'Fecha Hasta',                                       tabla:null},
+  {i:18, s:null, name:'Tramo Asig. Familiar',                              tabla:'t8'},
+  {i:19, s:null, name:'N° Cargas Simples',                                 tabla:null},
+  {i:20, s:null, name:'N° Cargas Maternales',                              tabla:null},
+  {i:21, s:null, name:'N° Cargas Inválidas',                               tabla:null},
+  {i:22, s:null, name:'Asignación Familiar',                               tabla:null},
+  {i:23, s:null, name:'Asig. Familiar Retroactiva',                        tabla:null},
+  {i:24, s:null, name:'Reintegro Cargas Familiares',                       tabla:null},
+  {i:25, s:null, name:'Solicitud Trabajador Joven',                        tabla:'t9'},
+  // Section 2 – Datos de la AFP
+  {i:26, s:'2- Datos de la AFP', name:'Código AFP',                        tabla:'t10'},
+  {i:27, s:null, name:'Renta Imponible AFP/SEGURO SOCIAL',                 tabla:null},
+  {i:28, s:null, name:'Cotización Obligatoria AFP',                        tabla:null},
+  {i:29, s:null, name:'Cotización SIS',                                    tabla:null},
+  {i:30, s:null, name:'Cuenta Ahorro Voluntario AFP',                      tabla:null},
+  {i:31, s:null, name:'Renta Imp. Sustitutiva AFP',                        tabla:null},
+  {i:32, s:null, name:'Tasa Pactada (Sustitutiva)',                        tabla:null},
+  {i:33, s:null, name:'Aporte Indemnización (Sust.)',                      tabla:null},
+  {i:34, s:null, name:'N° Períodos (Sustitutiva)',                         tabla:null},
+  {i:35, s:null, name:'Período desde (Sustitutiva)',                       tabla:null},
+  {i:36, s:null, name:'Período Hasta (Sustitutiva)',                       tabla:null},
+  {i:37, s:null, name:'Puesto de Trabajo Pesado',                          tabla:null},
+  {i:38, s:null, name:'% Cotización Trabajo Pesado',                       tabla:null},
+  {i:39, s:null, name:'Cotización Trabajo Pesado',                         tabla:null},
+  // Section 3 – APVI
+  {i:40, s:'3- Datos APVI', name:'Código Institución APVI',                tabla:'t11_afp'},
+  {i:41, s:null, name:'Número de Contrato APVI',                           tabla:null},
+  {i:42, s:null, name:'Forma de Pago APVI',                                tabla:'t12'},
+  {i:43, s:null, name:'Cotización APVI',                                   tabla:null},
+  {i:44, s:null, name:'Cotización Depósitos Convenidos',                   tabla:null},
+  // Section 4 – APVC
+  {i:45, s:'4- Datos APVC', name:'Código Institución APVC',                tabla:'t11_afp'},
+  {i:46, s:null, name:'Número de Contrato APVC',                           tabla:null},
+  {i:47, s:null, name:'Forma de Pago APVC',                                tabla:'t12'},
+  {i:48, s:null, name:'Cotización Trabajador APVC',                        tabla:null},
+  {i:49, s:null, name:'Cotización Empleador APVC',                         tabla:null},
+  // Section 5 – Afiliado Voluntario
+  {i:50, s:'5- Datos Afiliado Voluntario', name:'RUT Afiliado Voluntario', tabla:null},
+  {i:51, s:null, name:'DV Afiliado Voluntario',                            tabla:null},
+  {i:52, s:null, name:'Apellido Paterno (Af.Vol.)',                        tabla:null},
+  {i:53, s:null, name:'Apellido Materno (Af.Vol.)',                        tabla:null},
+  {i:54, s:null, name:'Nombres (Af.Vol.)',                                 tabla:null},
+  {i:55, s:null, name:'Cód. Movimiento Personal (Af.Vol.)',                tabla:'t13'},
+  {i:56, s:null, name:'Fecha desde (Af.Vol.)',                             tabla:null},
+  {i:57, s:null, name:'Fecha hasta (Af.Vol.)',                             tabla:null},
+  {i:58, s:null, name:'Código AFP (Af.Vol.)',                              tabla:'t10'},
+  {i:59, s:null, name:'Monto Capitalización Voluntaria',                   tabla:null},
+  {i:60, s:null, name:'Monto Ahorro Voluntario',                           tabla:null},
+  {i:61, s:null, name:'N° Períodos de Cotización',                         tabla:null},
+  // Section 6 – IPS-ISL-FONASA
+  {i:62, s:'6- Datos IPS-ISL-FONASA', name:'Código Ex-Caja Régimen',       tabla:'t14'},
+  {i:63, s:null, name:'Tasa Cotización Ex-Caja Previsión',                 tabla:null},
+  {i:64, s:null, name:'Renta Imponible IPS/ISL/Fonasa',                    tabla:null},
+  {i:65, s:null, name:'Cotización Obligatoria IPS',                        tabla:null},
+  {i:66, s:null, name:'Renta Imponible Desahucio',                         tabla:null},
+  {i:67, s:null, name:'Código Ex-Caja Régimen Desahucio',                  tabla:'t15'},
+  {i:68, s:null, name:'Tasa Cotización Desahucio Ex-Cajas',                tabla:null},
+  {i:69, s:null, name:'Cotización Desahucio',                              tabla:null},
+  {i:70, s:null, name:'Cotización Fonasa',                                 tabla:null},
+  {i:71, s:null, name:'Cotización Acc. Trabajo (ISL)',                     tabla:null},
+  {i:72, s:null, name:'Bonificación Ley 15.386',                           tabla:null},
+  {i:73, s:null, name:'Descuento Cargas Familiares IPS',                   tabla:null},
+  {i:74, s:null, name:'Bonos Gobierno',                                    tabla:null},
+  // Section 7 – Salud
+  {i:75, s:'7- Datos Salud', name:'Código Institución de Salud',           tabla:'t16'},
+  {i:76, s:null, name:'Número del FUN',                                    tabla:null},
+  {i:77, s:null, name:'Renta Imponible Isapre',                            tabla:null},
+  {i:78, s:null, name:'Moneda Plan Isapre',                                tabla:'t17'},
+  {i:79, s:null, name:'Cotización Pactada',                                tabla:null},
+  {i:80, s:null, name:'Cotización Obligatoria Isapre',                     tabla:null},
+  {i:81, s:null, name:'Cotización Adicional Isapre',                       tabla:null},
+  {i:82, s:null, name:'Monto GES (Uso Futuro)',                            tabla:null},
+  // Section 8 – CCAF
+  {i:83, s:'8- Datos CCAF', name:'Código CCAF',                            tabla:'t18'},
+  {i:84, s:null, name:'Renta Imponible CCAF',                              tabla:null},
+  {i:85, s:null, name:'Créditos Personales CCAF',                          tabla:null},
+  {i:86, s:null, name:'Descuento Dental CCAF',                             tabla:null},
+  {i:87, s:null, name:'Descuentos por Leasing',                            tabla:null},
+  {i:88, s:null, name:'Descuentos Seguro de Vida CCAF',                    tabla:null},
+  {i:89, s:null, name:'Otros Descuentos CCAF',                             tabla:null},
+  {i:90, s:null, name:'Cotización CCAF (no afil. Isapres)',                tabla:null},
+  {i:91, s:null, name:'Descuento Cargas Familiares CCAF',                  tabla:null},
+  {i:92, s:null, name:'Renta Imponible Mes Anterior (RIMA)',               tabla:null},
+  {i:93, s:null, name:'Tipo de Jornada',                                   tabla:'t22'},
+  {i:94, s:null, name:'Cotización Expectativa de Vida',                    tabla:null},
+  {i:95, s:null, name:'Cotización Rentabilidad Protegida',                 tabla:null},
+  // Section 9 – Mutualidad
+  {i:96, s:'9- Datos Mutualidad', name:'Código Mutualidad',                tabla:'t19'},
+  {i:97, s:null, name:'Renta Imponible Mutual',                            tabla:null},
+  {i:98, s:null, name:'Cotización Accidente del Trabajo',                  tabla:null},
+  {i:99, s:null, name:'Sucursal para pago Mutual',                         tabla:null},
+  // Section 10 – Seguro Cesantía
+  {i:100,s:'10- Datos Seguro Cesantía', name:'Renta Imp. Seguro Cesantía', tabla:null},
+  {i:101,s:null, name:'Aporte Trabajador Seg. Cesantía',                   tabla:null},
+  {i:102,s:null, name:'Aporte Empleador Seg. Cesantía',                    tabla:null},
+  // Section 11 – Pagador Subsidios
+  {i:103,s:'11- Datos Pagador Subsidios', name:'RUT Pagadora Subsidio',    tabla:'t20'},
+  {i:104,s:null, name:'DV Pagadora Subsidio',                              tabla:null},
+  // Section 12 – Otros datos empresa
+  {i:105,s:'12- Otros Datos de la Empresa', name:'Centro de Costos/Sucursal/Obra', tabla:null},
+];
+
+const SECTION_COLORS = [
+  '#5C6BC0','#26A69A','#EF5350','#AB47BC','#42A5F5','#66BB6A',
+  '#FFA726','#EC407A','#8D6E63','#78909C','#D4E157','#29B6F6'
+];
+
+function textColorFor(bg) {
+  const hex = bg.replace('#','');
+  const r = parseInt(hex.substring(0,2),16);
+  const g = parseInt(hex.substring(2,4),16);
+  const b = parseInt(hex.substring(4,6),16);
+  const lum = (0.299*r + 0.587*g + 0.114*b);
+  return lum > 160 ? '#222' : '#fff';
+}
+
+const NUM_COLS = 105;
+const ROW_H = 28;
+const OVERSCAN = 10;
+
+// ─── STATE ──────────────────────────────────────────────────────────────────
+let rows = [];          // display values (unquoted) — array of 105-string arrays
+let rawRows = [];       // original raw tokens per field — array of 105-string arrays
+let origRows = [];      // original display values (for revert detection)
+let origRawRows = [];   // original raw tokens (for restoring on revert)
+let modifiedCells = new Set(); // 'ri:fi' keys of edited cells
+let filteredIdx = [];   // indices into rows[] currently visible
+let theadEl = null;
+let tbodyEl = null;
+let tableEl = null;
+let renderedStart = -1;
+let renderedEnd = -1;
+let theadHeight = 0;
+let searchTerm = '';
+let originalLineEnding = '\r\n'; // detected from source file
+
+
+// ─── FILTER ─────────────────────────────────────────────────────────────────
+function applyFilter() {
+  const term = searchTerm.trim().toLowerCase();
+  if (!term) {
+    filteredIdx = rows.map((_, i) => i);
+  } else {
+    filteredIdx = [];
+    rows.forEach((row, i) => {
+      if (row.some(v => v.toLowerCase().includes(term))) filteredIdx.push(i);
+    });
+  }
+  const info = document.getElementById('searchInfo');
+  if (term) {
+    info.style.display = '';
+    info.textContent = `${filteredIdx.length} resultado${filteredIdx.length !== 1 ? 's' : ''} de ${rows.length}`;
+  } else {
+    info.style.display = 'none';
+  }
+  document.getElementById('rowCount').textContent = rows.length;
+  renderedStart = -1; renderedEnd = -1;
+  if (tbodyEl) { tbodyEl.innerHTML = ''; onScroll(); }
+}
+
+// ─── BUILD STATIC HEADER ────────────────────────────────────────────────────
+function buildTable() {
+  const wrap = document.getElementById('tableWrap');
+  wrap.removeEventListener('scroll', onScroll);
+  wrap.innerHTML = '';
+  renderedStart = -1; renderedEnd = -1;
+  theadEl = null; tbodyEl = null; tableEl = null; theadHeight = 0;
+
+  if (rows.length === 0) {
+    wrap.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p>Abre un archivo CSV para comenzar.</p></div>`;
+    document.getElementById('rowCount').textContent = 0;
+    return;
+  }
+
+  tableEl = document.createElement('table');
+  theadEl = document.createElement('thead');
+
+  // Row 1: section groups
+  const secRow = document.createElement('tr');
+  const thSpacer = document.createElement('th');
+  thSpacer.rowSpan = 2;
+  thSpacer.style.cssText = 'min-width:36px;width:36px;background:#ede7f6;border:none;position:sticky;left:0;z-index:20;';
+  secRow.appendChild(thSpacer);
+
+  // build section map: for each field index, store its section color
+  const fieldSectionColor = [];
+  let secIdx = -1;
+  let i = 0;
+  while (i < FIELDS.length) {
+    if (FIELDS[i].s) {
+      secIdx++;
+      let count = 1;
+      while (i + count < FIELDS.length && !FIELDS[i+count].s) count++;
+      const color = SECTION_COLORS[secIdx % SECTION_COLORS.length];
+      for (let j = 0; j < count; j++) fieldSectionColor[i + j] = color;
+      const th = document.createElement('th');
+      th.colSpan = count;
+      th.style.cssText = `background:${color};color:${textColorFor(color)};text-align:left;font-size:11px;padding:3px 6px;letter-spacing:.5px;`;
+      th.textContent = FIELDS[i].s;
+      secRow.appendChild(th);
+      i += count;
+    } else { i++; }
+  }
+  theadEl.appendChild(secRow);
+
+  // Row 2: field names
+  const nameRow = document.createElement('tr');
+  FIELDS.forEach((f, fi) => {
+    const th = document.createElement('th');
+    th.innerHTML = `<span class="col-num">#${f.i}</span><span class="col-name">${f.name}</span>`;
+    th.title = f.name;
+    const c = fieldSectionColor[fi] || '#4a148c';
+    th.style.background = c;
+    th.style.color = textColorFor(c);
+    nameRow.appendChild(th);
+  });
+  theadEl.appendChild(nameRow);
+  tableEl.appendChild(theadEl);
+
+  tbodyEl = document.createElement('tbody');
+  tableEl.appendChild(tbodyEl);
+  wrap.appendChild(tableEl);
+
+  // measure thead height after paint
+  requestAnimationFrame(() => {
+    theadHeight = theadEl.getBoundingClientRect().height;
+    onScroll();
+  });
+
+  wrap.addEventListener('scroll', onScroll);
+  document.getElementById('rowCount').textContent = rows.length;
+
+  applyFilter();
+}
+
+// ─── VIRTUAL SCROLL ─────────────────────────────────────────────────────────
+function onScroll() {
+  const wrap = document.getElementById('tableWrap');
+  if (!wrap || !tbodyEl) return;
+
+  const scrollTop = wrap.scrollTop;
+  const viewH = wrap.clientHeight;
+  const totalFiltered = filteredIdx.length;
+
+  const firstVis = Math.max(0, Math.floor((scrollTop - theadHeight) / ROW_H) - OVERSCAN);
+  const lastVis  = Math.min(totalFiltered - 1, Math.ceil((scrollTop - theadHeight + viewH) / ROW_H) + OVERSCAN);
+
+  if (firstVis === renderedStart && lastVis === renderedEnd) return;
+  renderedStart = firstVis;
+  renderedEnd   = lastVis;
+
+  tbodyEl.innerHTML = '';
+
+  // top spacer
+  if (firstVis > 0) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = FIELDS.length + 1;
+    td.style.height = (firstVis * ROW_H) + 'px';
+    td.style.padding = '0'; td.style.border = 'none';
+    tr.appendChild(td);
+    tbodyEl.appendChild(tr);
+  }
+
+  for (let vi = firstVis; vi <= lastVis; vi++) {
+    tbodyEl.appendChild(buildRow(vi));
+  }
+
+  // bottom spacer
+  const remaining = totalFiltered - 1 - lastVis;
+  if (remaining > 0) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = FIELDS.length + 1;
+    td.style.height = (remaining * ROW_H) + 'px';
+    td.style.padding = '0'; td.style.border = 'none';
+    tr.appendChild(td);
+    tbodyEl.appendChild(tr);
+  }
+}
+
+// vi = index into filteredIdx; ri = actual row index in rows[]
+function buildRow(vi) {
+  const ri = filteredIdx[vi];
+  const row = rows[ri];
+  const tr = document.createElement('tr');
+  tr.style.height = ROW_H + 'px';
+
+  const tdNum = document.createElement('td');
+  tdNum.className = 'row-num';
+  tdNum.textContent = ri + 1;  // always shows original row number
+  tr.appendChild(tdNum);
+
+  FIELDS.forEach((f, fi) => {
+    const td = document.createElement('td');
+    const val = row[fi] || '';
+    if (modifiedCells.has(`${ri}:${fi}`)) td.classList.add('modified');
+    if (f.tabla) {
+      const sel = document.createElement('select');
+      const blank = document.createElement('option');
+      blank.value = ''; blank.textContent = '--';
+      sel.appendChild(blank);
+      const normVal = val.trim();
+      let matched = false;
+      (TABLAS[f.tabla] || []).forEach(([code, label]) => {
+        const opt = document.createElement('option');
+        opt.value = code;
+        opt.textContent = `${code} – ${label}`;
+        if (!matched && (code === normVal || code === normVal.padStart(code.length, '0'))) {
+          opt.selected = true;
+          matched = true;
+        }
+        sel.appendChild(opt);
+      });
+      sel.dataset.origVal = val;
+      sel.addEventListener('change', e => {
+        const newVal = e.target.value;
+        rows[ri][fi] = newVal;
+        rawRows[ri][fi] = null;
+        updateModified(ri, fi, e.target.closest('td'));
+      });
+      td.appendChild(sel);
+    } else {
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.value = val;
+      // highlight matching text
+      if (searchTerm && val.toLowerCase().includes(searchTerm.toLowerCase())) {
+        inp.style.background = '#fff59d';
+      }
+      inp.addEventListener('input', e => { rows[ri][fi] = e.target.value; rawRows[ri][fi] = null; updateModified(ri, fi, e.target.closest('td')); });
+      td.appendChild(inp);
+    }
+    tr.appendChild(td);
+  });
+  return tr;
+}
+
+function updateModified(ri, fi, tdEl) {
+  const key = `${ri}:${fi}`;
+  const isReverted = rows[ri][fi] === origRows[ri][fi];
+  if (isReverted) {
+    modifiedCells.delete(key);
+    rawRows[ri][fi] = origRawRows[ri][fi];
+    if (tdEl) tdEl.classList.remove('modified');
+  } else {
+    modifiedCells.add(key);
+    if (tdEl) tdEl.classList.add('modified');
+  }
+  const info = document.getElementById('modifiedInfo');
+  if (modifiedCells.size > 0) {
+    info.style.display = '';
+    info.textContent = `✏️ ${modifiedCells.size} celda${modifiedCells.size !== 1 ? 's' : ''} modificada${modifiedCells.size !== 1 ? 's' : ''}`;
+  } else {
+    info.style.display = 'none';
+  }
+}
+
+// ─── CSV PARSING ────────────────────────────────────────────────────────────
+function parseCSV(text) {
+  const lines = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
+  const display = [];
+  const raw = [];
+  for (const line of lines) {
+    if (line.trim() === '') continue;
+    const { displayCols, rawCols } = splitCSVLine(line, ';');
+    while (displayCols.length < NUM_COLS) { displayCols.push(''); rawCols.push(''); }
+    display.push(displayCols.slice(0, NUM_COLS));
+    raw.push(rawCols.slice(0, NUM_COLS));
+  }
+  return { display, raw };
+}
+
+// Returns both the unquoted display value and the original raw token for each field
+function splitCSVLine(line, sep) {
+  const displayCols = [];
+  const rawCols = [];
+  let cur = '';      // unquoted display value
+  let raw = '';      // original characters for this field
+  let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      raw += ch;
+      if (!inQ) {
+        inQ = true;
+      } else if (line[i+1] === '"') {
+        cur += '"'; raw += '"'; i++;
+      } else {
+        inQ = false;
+      }
+    } else if (ch === sep && !inQ) {
+      displayCols.push(cur);
+      rawCols.push(raw);
+      cur = ''; raw = '';
+    } else {
+      cur += ch;
+      raw += ch;
+    }
+  }
+  displayCols.push(cur);
+  rawCols.push(raw);
+  return { displayCols, rawCols };
+}
+
+// ─── CSV EXPORT ─────────────────────────────────────────────────────────────
+function exportCSV() {
+  if (rows.length === 0) { alert('No hay datos para exportar.'); return; }
+  const lines = rows.map((row, ri) =>
+    row.map((val, fi) => {
+      const rr = rawRows[ri];
+      if (rr && rr[fi] !== null && rr[fi] !== undefined) return rr[fi];
+      // field was edited: re-serialize
+      if (val.includes(';') || val.includes('"') || val.includes('\n')) {
+        return '"' + val.replace(/"/g, '""') + '"';
+      }
+      return val;
+    }).join(';')
+  );
+  const out = lines.join(originalLineEnding);
+  const bytes = new Uint8Array(out.length);
+  for (let i = 0; i < out.length; i++) bytes[i] = out.charCodeAt(i) & 0xFF;
+  const blob = new Blob([bytes], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'previred_export.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── EVENT LISTENERS ────────────────────────────────────────────────────────
+document.getElementById('fileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = evt => {
+    const text = evt.target.result;
+    // detect original line ending
+    if (text.includes('\r\n')) originalLineEnding = '\r\n';
+    else if (text.includes('\r')) originalLineEnding = '\r';
+    else originalLineEnding = '\n';
+    const parsed = parseCSV(text);
+    rows = parsed.display;
+    rawRows = parsed.raw;
+    origRows = parsed.display.map(r => [...r]);
+    origRawRows = parsed.raw.map(r => [...r]);
+    modifiedCells = new Set();
+    document.getElementById('modifiedInfo').style.display = 'none';
+    searchTerm = '';
+    document.getElementById('searchInput').value = '';
+    document.getElementById('clearSearch').classList.remove('visible');
+    document.getElementById('searchInfo').style.display = 'none';
+    buildTable();
+  };
+  reader.readAsText(file, 'ISO-8859-1');
+  e.target.value = '';
+});
+
+document.getElementById('btnExport').addEventListener('click', exportCSV);
+
+// ─── SEARCH ──────────────────────────────────────────────────────────────────
+let searchDebounce = null;
+document.getElementById('searchInput').addEventListener('input', e => {
+  searchTerm = e.target.value;
+  document.getElementById('clearSearch').classList.toggle('visible', searchTerm.length > 0);
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => {
+    if (rows.length > 0) applyFilter();
+  }, 200);
+});
+
+document.getElementById('clearSearch').addEventListener('click', () => {
+  searchTerm = '';
+  document.getElementById('searchInput').value = '';
+  document.getElementById('clearSearch').classList.remove('visible');
+  if (rows.length > 0) applyFilter();
+});
+
+// ─── UNSAVED CHANGES WARNING ─────────────────────────────────────────────────
+window.addEventListener('beforeunload', e => {
+  if (modifiedCells.size > 0) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
+// Initial render
+buildTable();
+</script>
+</body>
+</html>
